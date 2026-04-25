@@ -1,7 +1,8 @@
+import os
 import send2trash
 from typing import List
 
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, QSettings, Slot
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QProgressBar, QFileDialog,
@@ -169,13 +170,23 @@ class MainWindow(QMainWindow):
         # Placeholder message
         self._show_placeholder("Choose a folder and click Scan to find duplicate images.")
 
+        # Restore last-used folder
+        settings = QSettings("ImageDedup", "ImageDeduplicator")
+        saved = settings.value("last_directory", "")
+        if saved and os.path.isdir(saved):
+            self._directory = saved
+            display = saved if len(saved) <= 70 else "…" + saved[-67:]
+            self.dir_label.setText(display)
+            self.dir_label.setToolTip(saved)
+            self.scan_btn.setEnabled(True)
+
     # ── Directory picker ──────────────────────────────────────────────────────
 
     def _pick_directory(self):
         path = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if path:
             self._directory = path
-            # Truncate long paths for display
+            QSettings("ImageDedup", "ImageDeduplicator").setValue("last_directory", path)
             display = path if len(path) <= 70 else "…" + path[-67:]
             self.dir_label.setText(display)
             self.dir_label.setToolTip(path)
@@ -295,6 +306,14 @@ class MainWindow(QMainWindow):
         self._show_placeholder("Files moved to Recycle Bin. Run a new scan to refresh results.")
         self.delete_btn.setEnabled(False)
         self.marked_label.setText("")
+
+    # ── Window close ─────────────────────────────────────────────────────────
+
+    def closeEvent(self, event):
+        if self._worker and self._worker.isRunning():
+            self._worker.abort()
+            self._worker.wait()
+        event.accept()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
