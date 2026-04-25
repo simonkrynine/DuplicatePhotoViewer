@@ -26,7 +26,7 @@ class ThumbnailCard(QFrame):
 
     selection_changed = Signal()
 
-    def __init__(self, file_path: str, parent=None):
+    def __init__(self, file_path: str, protected: bool = False, parent=None):
         super().__init__(parent)
         self.file_path = file_path
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -85,9 +85,22 @@ class ThumbnailCard(QFrame):
         layout.addWidget(size_label)
 
         # Delete checkbox
-        self.checkbox = QCheckBox("Mark for deletion")
-        self.checkbox.setStyleSheet("color: #e05555; font-size: 10px;")
-        self.checkbox.stateChanged.connect(self.selection_changed.emit)
+        if protected:
+            self.checkbox = QCheckBox("Keep (protected)")
+            self.checkbox.setEnabled(False)
+            self.checkbox.setStyleSheet("""
+                QCheckBox { color: #557755; font-size: 12px; font-weight: bold; }
+                QCheckBox::indicator { width: 18px; height: 18px; }
+            """)
+        else:
+            self.checkbox = QCheckBox("Mark for deletion")
+            self.checkbox.setStyleSheet("""
+                QCheckBox { color: #e05555; font-size: 12px; font-weight: bold; }
+                QCheckBox::indicator { width: 18px; height: 18px; }
+                QCheckBox::indicator:unchecked { border: 2px solid #883333; border-radius: 3px; background: #1a1a1a; }
+                QCheckBox::indicator:checked { border: 2px solid #e05555; border-radius: 3px; background: #e05555; }
+            """)
+            self.checkbox.stateChanged.connect(lambda _: self.selection_changed.emit())
         layout.addWidget(self.checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
 
     def is_marked(self) -> bool:
@@ -136,8 +149,8 @@ class DuplicateGroupWidget(QFrame):
         row.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.cards: List[ThumbnailCard] = []
-        for path in paths:
-            card = ThumbnailCard(path)
+        for i, path in enumerate(paths):
+            card = ThumbnailCard(path, protected=(i == 0))
             card.selection_changed.connect(self.deletion_changed.emit)
             self.cards.append(card)
             row.addWidget(card)

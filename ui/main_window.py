@@ -243,6 +243,7 @@ class MainWindow(QMainWindow):
 
         # Add a thin separator
         line = QFrame()
+        line.setObjectName("separator")
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("color: #2e2e2e;")
         self.results_layout.insertWidget(idx + 1, line)
@@ -290,22 +291,43 @@ class MainWindow(QMainWindow):
             return
 
         errors = []
-        moved = 0
+        deleted: set[str] = set()
         for path in paths:
             try:
                 send2trash.send2trash(path)
-                moved += 1
+                deleted.add(path)
             except Exception as e:
                 errors.append(f"{path}: {e}")
 
         if errors:
             QMessageBox.critical(self, "Move Errors", "\n".join(errors))
 
-        self._set_status(f"{moved} file(s) moved to Recycle Bin.")
-        self._clear_results()
-        self._show_placeholder("Files moved to Recycle Bin. Run a new scan to refresh results.")
+        self._set_status(f"{len(deleted)} file(s) moved to Recycle Bin.")
+
+        # Remove only groups that had at least one file successfully deleted
+        for gw in [g for g in self._group_widgets if any(c.file_path in deleted for c in g.cards)]:
+            self._remove_group_widget(gw)
+
+        if not self._group_widgets:
+            self._show_placeholder("Files moved to Recycle Bin. Run a new scan to refresh results.")
+
         self.delete_btn.setEnabled(False)
         self.marked_label.setText("")
+
+    def _remove_group_widget(self, gw: DuplicateGroupWidget):
+        idx = self.results_layout.indexOf(gw)
+        if idx < 0:
+            return
+        self.results_layout.takeAt(idx)
+        gw.hide()
+        gw.deleteLater()
+        sep = self.results_layout.itemAt(idx)
+        if sep and sep.widget() and sep.widget().objectName() == "separator":
+            w = sep.widget()
+            self.results_layout.takeAt(idx)
+            w.hide()
+            w.deleteLater()
+        self._group_widgets.remove(gw)
 
     # ── Window close ─────────────────────────────────────────────────────────
 
@@ -325,24 +347,28 @@ class MainWindow(QMainWindow):
 
     def _clear_results(self):
         self._group_widgets.clear()
-        while self.results_layout.count() > 1:
+        while self.results_layout.count() > 0:
             item = self.results_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            widget = item.widget()
+            if widget:
+                widget.hide()
+                widget.deleteLater()
+        self.results_layout.addStretch()
 
     def _show_placeholder(self, text: str):
-        # Replace any existing placeholder
-        item = self.results_layout.itemAt(self.results_layout.count() - 1)
+        item = self.results_layout.itemAt(0)
         if item and item.widget() and item.widget().objectName() == "placeholder":
-            item.widget().deleteLater()
-            self.results_layout.takeAt(self.results_layout.count() - 1)
+            w = item.widget()
+            self.results_layout.takeAt(0)
+            w.hide()
+            w.deleteLater()
 
         if text:
             label = QLabel(text)
             label.setObjectName("placeholder")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setStyleSheet("color: #555; font-size: 14px; padding: 40px;")
-            self.results_layout.addWidget(label)
+            self.results_layout.insertWidget(0, label)
 
     def _set_scan_idle(self):
         self.progress.setVisible(False)
